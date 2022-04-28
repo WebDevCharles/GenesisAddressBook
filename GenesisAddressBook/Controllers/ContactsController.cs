@@ -11,6 +11,7 @@ using GenesisAddressBook.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using GenesisAddressBook.Enums;
+using GenesisAddressBook.Services.Interfaces;
 
 namespace GenesisAddressBook.Controllers
 {
@@ -18,11 +19,13 @@ namespace GenesisAddressBook.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly UserManager<AppUser> _userManager;
+        private readonly IAddressBookService _addressService;
 
-        public ContactsController(ApplicationDbContext context, UserManager<AppUser> userManager)
+        public ContactsController(ApplicationDbContext context, UserManager<AppUser> userManager, IAddressBookService addressBookService)
         {
             _context = context;
             _userManager = userManager;
+            _addressService = addressBookService;
         }
 
         // GET: Contacts
@@ -56,9 +59,12 @@ namespace GenesisAddressBook.Controllers
         }
 
         // GET: Contacts/Create
-        public IActionResult Create()
+        public async Task<IActionResult> Create()
         {
+            string appUserId = _userManager.GetUserId(User);
+
             ViewData["StatesList"] = new SelectList(Enum.GetValues(typeof(States)).Cast<States>().ToList());
+            ViewData["CategoryList"] = new MultiSelectList(await _addressService.GetUserCategoriesAsync(appUserId),"Id", "Name");
             return View();
         }
 
@@ -121,6 +127,7 @@ namespace GenesisAddressBook.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(int id, [Bind("Id,AppUserId,FirstName,LastName,BirthDate,Address1,Address2,City,State,ZipCode,Email,PhoneNumber,Created,ImageDate,ImageType")] Contact contact)
         {
+
             if (id != contact.Id)
             {
                 return NotFound();
