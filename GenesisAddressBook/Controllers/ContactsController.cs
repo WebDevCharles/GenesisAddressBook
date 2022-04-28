@@ -44,7 +44,7 @@ namespace GenesisAddressBook.Controllers
                 return NotFound();
             }
 
-            var contact = await _context.Contacts
+            Contact contact = await _context.Contacts 
                 .Include(c => c.AppUser)
                 .FirstOrDefaultAsync(m => m.Id == id);
             if (contact == null)
@@ -69,6 +69,8 @@ namespace GenesisAddressBook.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create([Bind("Id,FirstName,LastName,BirthDate,Address1,Address2,City,State,ZipCode,Email,PhoneNumber,ImageType")] Contact contact)
         {
+            ModelState.Remove("AppUserId");
+
             if (ModelState.IsValid)
             {
                 contact.AppUserId = _userManager.GetUserId(User);
@@ -101,12 +103,14 @@ namespace GenesisAddressBook.Controllers
                 return NotFound();
             }
 
-            var contact = await _context.Contacts.FindAsync(id);
+            Contact contact = await _context.Contacts.FindAsync(id);
+
             if (contact == null)
             {
                 return NotFound();
             }
-            ViewData["AppUserId"] = new SelectList(_context.Users, "Id", "Id", contact.AppUserId);
+
+            ViewData["StatesList"] = new SelectList(Enum.GetValues(typeof(States)).Cast<States>().ToList());
             return View(contact);
         }
 
@@ -115,7 +119,7 @@ namespace GenesisAddressBook.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,AppUserId,FirstName,LastName,BirthDate,Address1,Address2,City,State,ZipCode,Email,PhoneNumber,Created,ImageData,ImageType")] Contact contact)
+        public async Task<IActionResult> Edit(int id, [Bind("Id,AppUserId,FirstName,LastName,BirthDate,Address1,Address2,City,State,ZipCode,Email,PhoneNumber,Created,ImageDate,ImageType")] Contact contact)
         {
             if (id != contact.Id)
             {
@@ -126,6 +130,19 @@ namespace GenesisAddressBook.Controllers
             {
                 try
                 {
+                    contact.Created = DateTime.SpecifyKind(contact.Created, DateTimeKind.Utc);
+
+                    if (contact.BirthDate != null)
+                    {
+                        contact.BirthDate = DateTime.SpecifyKind(contact.BirthDate.Value, DateTimeKind.Utc);
+                    }
+
+                    if (contact.ImageFile != null)
+                    {
+                        // TO-DO: Image service //
+                    }
+
+
                     _context.Update(contact);
                     await _context.SaveChangesAsync();
                 }
@@ -142,7 +159,8 @@ namespace GenesisAddressBook.Controllers
                 }
                 return RedirectToAction(nameof(Index));
             }
-            ViewData["AppUserId"] = new SelectList(_context.Users, "Id", "Id", contact.AppUserId);
+
+            ViewData["StatesList"] = new SelectList(Enum.GetValues(typeof(States)).Cast<States>().ToList());
             return View(contact);
         }
 
@@ -154,7 +172,7 @@ namespace GenesisAddressBook.Controllers
                 return NotFound();
             }
 
-            var contact = await _context.Contacts
+            Contact contact = await _context.Contacts
                 .Include(c => c.AppUser)
                 .FirstOrDefaultAsync(m => m.Id == id);
             if (contact == null)
@@ -170,7 +188,7 @@ namespace GenesisAddressBook.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var contact = await _context.Contacts.FindAsync(id);
+            Contact contact = await _context.Contacts.FindAsync(id);
             _context.Contacts.Remove(contact);
             await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Index));

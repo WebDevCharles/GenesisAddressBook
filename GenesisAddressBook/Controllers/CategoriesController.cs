@@ -8,23 +8,31 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using GenesisAddressBook.Data;
 using GenesisAddressBook.Models;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authorization;
 
 namespace GenesisAddressBook.Controllers
 {
     public class CategoriesController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly UserManager<AppUser> _userManager;
 
-        public CategoriesController(ApplicationDbContext context)
+        public CategoriesController(ApplicationDbContext context, UserManager<AppUser> userManager)
         {
             _context = context;
+            _userManager = userManager;
         }
 
         // GET: Categories
+        [Authorize]
         public async Task<IActionResult> Index()
         {
-            var applicationDbContext = _context.Categories.Include(c => c.AppUser);
-            return View(await applicationDbContext.ToListAsync());
+            AppUser appUser = await _userManager.GetUserAsync(User);
+
+            List<Category> categories = await _context.Categories.Where(c => c.AppUserId == appUser.Id).Include(c => c.AppUser).ToListAsync();
+
+            return View(categories);
         }
 
         // GET: Categories/Details/5
@@ -35,7 +43,7 @@ namespace GenesisAddressBook.Controllers
                 return NotFound();
             }
 
-            var category = await _context.Categories
+            Category category = await _context.Categories
                 .Include(c => c.AppUser)
                 .FirstOrDefaultAsync(m => m.Id == id);
             if (category == null)
@@ -47,6 +55,7 @@ namespace GenesisAddressBook.Controllers
         }
 
         // GET: Categories/Create
+        [Authorize]
         public IActionResult Create()
         {
             ViewData["AppUserId"] = new SelectList(_context.Users, "Id", "Id");
@@ -58,19 +67,23 @@ namespace GenesisAddressBook.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Id,AppUserId,Name")] Category category)
+        public async Task<IActionResult> Create([Bind("Id,Name")] Category category)
         {
+            ModelState.Remove("AppUserId");
+
             if (ModelState.IsValid)
             {
+                category.AppUserId = _userManager.GetUserId(User);
                 _context.Add(category);
                 await _context.SaveChangesAsync();
                 return RedirectToAction(nameof(Index));
             }
-            ViewData["AppUserId"] = new SelectList(_context.Users, "Id", "Id", category.AppUserId);
+            
             return View(category);
         }
 
         // GET: Categories/Edit/5
+        [Authorize]
         public async Task<IActionResult> Edit(int? id)
         {
             if (id == null)
@@ -78,12 +91,12 @@ namespace GenesisAddressBook.Controllers
                 return NotFound();
             }
 
-            var category = await _context.Categories.FindAsync(id);
+            Category category = await _context.Categories.FindAsync(id);
             if (category == null)
             {
                 return NotFound();
             }
-            ViewData["AppUserId"] = new SelectList(_context.Users, "Id", "Id", category.AppUserId);
+            
             return View(category);
         }
 
@@ -131,7 +144,7 @@ namespace GenesisAddressBook.Controllers
                 return NotFound();
             }
 
-            var category = await _context.Categories
+            Category category = await _context.Categories
                 .Include(c => c.AppUser)
                 .FirstOrDefaultAsync(m => m.Id == id);
             if (category == null)
@@ -147,7 +160,7 @@ namespace GenesisAddressBook.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var category = await _context.Categories.FindAsync(id);
+            Category category = await _context.Categories.FindAsync(id);
             _context.Categories.Remove(category);
             await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Index));
