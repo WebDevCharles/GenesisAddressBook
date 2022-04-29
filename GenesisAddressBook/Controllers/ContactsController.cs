@@ -19,13 +19,15 @@ namespace GenesisAddressBook.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly UserManager<AppUser> _userManager;
-        private readonly IAddressBookService _addressService;
+        private readonly IAddressBookService _addressBookService;
+        private readonly IImageService _imageService;
 
-        public ContactsController(ApplicationDbContext context, UserManager<AppUser> userManager, IAddressBookService addressBookService)
+        public ContactsController(ApplicationDbContext context, UserManager<AppUser> userManager, IAddressBookService addressBookService, IImageService imageService)
         {
             _context = context;
             _userManager = userManager;
-            _addressService = addressBookService;
+            _addressBookService = addressBookService;
+            _imageService = imageService;
         }
 
         // GET: Contacts
@@ -49,7 +51,9 @@ namespace GenesisAddressBook.Controllers
 
             Contact contact = await _context.Contacts 
                 .Include(c => c.AppUser)
+                .Include(c => c.Categories)
                 .FirstOrDefaultAsync(m => m.Id == id);
+
             if (contact == null)
             {
                 return NotFound();
@@ -59,12 +63,13 @@ namespace GenesisAddressBook.Controllers
         }
 
         // GET: Contacts/Create
+        [Authorize]
         public async Task<IActionResult> Create()
         {
             string appUserId = _userManager.GetUserId(User);
 
             ViewData["StatesList"] = new SelectList(Enum.GetValues(typeof(States)).Cast<States>().ToList());
-            ViewData["CategoryList"] = new MultiSelectList(await _addressService.GetUserCategoriesAsync(appUserId),"Id", "Name");
+            ViewData["CategoryList"] = new MultiSelectList(await _addressBookService.GetUserCategoriesAsync(appUserId),"Id", "Name");
             return View();
         }
 
@@ -73,7 +78,7 @@ namespace GenesisAddressBook.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Id,FirstName,LastName,BirthDate,Address1,Address2,City,State,ZipCode,Email,PhoneNumber,ImageType")] Contact contact)
+        public async Task<IActionResult> Create([Bind("Id,FirstName,LastName,BirthDate,Address1,Address2,City,State,ZipCode,Email,PhoneNumber,ImageFile")] Contact contact, List<int> categoryList)
         {
             ModelState.Remove("AppUserId");
 
@@ -90,14 +95,28 @@ namespace GenesisAddressBook.Controllers
                 if (contact.ImageFile != null)
                 {
                     // TO-DO: Image service //
+                    contact.ImageData = await _imageService.ConvertFileToByteArrayAsync(contact.ImageFile);
+                    contact.ImageType = contact.ImageFile.ContentType;
+
                 }
 
                 _context.Add(contact);
                 await _context.SaveChangesAsync();
 
+                // Add Contact to Categories //
+                foreach (int categoryId in categoryList)
+                {
+                    await _addressBookService.AddContactToCategoryAsync(categoryId, contact.Id);
+                }
+
+
                 return RedirectToAction(nameof(Index));
             }
-            ViewData["AppUserId"] = new SelectList(_context.Users, "Id", "Id", contact.AppUserId);
+
+            string appUserId = _userManager.GetUserId(User);
+
+            ViewData["StatesList"] = new SelectList(Enum.GetValues(typeof(States)).Cast<States>().ToList());
+            ViewData["CategoryList"] = new MultiSelectList(await _addressBookService.GetUserCategoriesAsync(appUserId), "Id", "Name");
             return View(contact);
         }
 
@@ -116,7 +135,11 @@ namespace GenesisAddressBook.Controllers
                 return NotFound();
             }
 
+            string appUserId = _userManager.GetUserId(User);
+
             ViewData["StatesList"] = new SelectList(Enum.GetValues(typeof(States)).Cast<States>().ToList());
+            ViewData["CategoryList"] = new MultiSelectList(await _addressBookService.GetUserCategoriesAsync(appUserId), "Id", "Name", await _addressBookService.GetContactCategoryIdsAsync(contact.Id));
+
             return View(contact);
         }
 
@@ -125,7 +148,7 @@ namespace GenesisAddressBook.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,AppUserId,FirstName,LastName,BirthDate,Address1,Address2,City,State,ZipCode,Email,PhoneNumber,Created,ImageDate,ImageType")] Contact contact)
+        public async Task<IActionResult> Edit(int id, [Bind("Id,AppUserId,FirstName,LastName,BirthDate,Address1,Address2,City,State,ZipCode,Email,PhoneNumber,Created,ImageData,ImageType")] Contact contact, List<int> categoryList)
         {
 
             if (id != contact.Id)
@@ -147,11 +170,25 @@ namespace GenesisAddressBook.Controllers
                     if (contact.ImageFile != null)
                     {
                         // TO-DO: Image service //
+
                     }
 
 
                     _context.Update(contact);
                     await _context.SaveChangesAsync();
+
+                    List<Category> oldCategories = (await _addressBookService.GetContactCategoriesAsync(contact.Id)).ToList(); 
+
+                    foreach (Category category in oldCategories)
+                    {
+                        await _addressBookService.RemoveContactFromCategoryAsync(category.Id, contact.Id);
+                    }
+
+                    foreach (int categoryId in categoryList)
+                    {
+                        await _addressBookService.AddContactToCategoryAsync(categoryId, contact.Id);
+                    }
+
                 }
                 catch (DbUpdateConcurrencyException)
                 {
