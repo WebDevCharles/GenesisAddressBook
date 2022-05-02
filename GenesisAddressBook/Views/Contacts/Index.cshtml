@@ -1,9 +1,11 @@
 ﻿@using GenesisAddressBook.Services.Interfaces
 @model IEnumerable<GenesisAddressBook.Models.Contact>
+
 @inject IImageService ImageService
 @{
     ViewData["Title"] = "Index";
 }
+
 <h1>Contacts</h1>
 
 <div class="row mb-5">
@@ -68,3 +70,25 @@
         </div>
     }
 </div>
+@section scripts{
+
+<!-- Sweet Alerts -->
+<script>
+    var message = '@(ViewBag.SwalMessage)';
+
+    if(!message.includes("Error") && message != '')
+    {
+        Swal.fire({
+            icon: 'success',
+            title: message,
+            showConfirmButton: true
+        })
+    }else if(message.includes("Error")){
+        Swal.fire({
+            icon: 'error',
+            title: 'Oops...',
+            text: message
+        })
+    }
+</script>
+}

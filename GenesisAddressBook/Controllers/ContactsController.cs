@@ -34,12 +34,17 @@ namespace GenesisAddressBook.Controllers
 
         // GET: Contacts
         [Authorize]
-        public async Task<IActionResult> Index(int id)
+        public async Task<IActionResult> Index(int id, string swalMessage = null)
         {
+            ViewData["SwalMessage"] = swalMessage;
+
             List<Contact> contacts = new List<Contact>();
 
             string appUserId = _userManager.GetUserId(User);
-            AppUser appUser = _context.Users.Include(c => c.Contacts).ThenInclude(c => c.Categories).FirstOrDefault(u => u.Id == appUserId);
+            AppUser appUser = _context.Users
+                                        .Include(c => c.Contacts)
+                                        .ThenInclude(c => c.Categories)
+                                        .FirstOrDefault(u => u.Id == appUserId);
 
             if (id == 0)
             {
@@ -103,9 +108,19 @@ namespace GenesisAddressBook.Controllers
                 AppUser appUser = await _userManager.GetUserAsync(User);
                 string emailBody = _emailSender.ComposeEmailBody(appUser, emailData);
 
-                await _emailSender.SendEmailAsync(emailData.EmailAddress, emailData.Subject, emailData.Body);
 
-                return RedirectToAction("Index", "Contacts");
+                try
+                {
+                    await _emailSender.SendEmailAsync(emailData.EmailAddress, emailData.Subject, emailData.Body);
+                    return RedirectToAction("Index", "Contacts", new { swalMessage = "Email sent!" });
+                }
+                catch (Exception)
+                {
+                    return RedirectToAction("Index", "Contacts", new { swalMessage = "Error: Message send failed!" });
+
+                    throw;
+                }
+
             }
 
 
