@@ -61,6 +61,7 @@ namespace GenesisAddressBook.Models
         public string? ImageType { get; set; }
 
         [NotMapped]
+        [Display(Name = "Image File")]
         public IFormFile? ImageFile { get; set; }
 
 

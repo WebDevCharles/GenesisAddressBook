@@ -1,17 +1,15 @@
 ﻿#nullable disable
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using GenesisAddressBook.Data;
+using GenesisAddressBook.Enums;
+using GenesisAddressBook.Models;
+using GenesisAddressBook.Models.ViewModels;
+using GenesisAddressBook.Services;
+using GenesisAddressBook.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
-using GenesisAddressBook.Data;
-using GenesisAddressBook.Models;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Authorization;
-using GenesisAddressBook.Enums;
-using GenesisAddressBook.Services.Interfaces;
 
 namespace GenesisAddressBook.Controllers
 {
@@ -21,24 +19,97 @@ namespace GenesisAddressBook.Controllers
         private readonly UserManager<AppUser> _userManager;
         private readonly IAddressBookService _addressBookService;
         private readonly IImageService _imageService;
+        private readonly SearchService _searchService;
+        private readonly IABEmailSender _emailSender;
 
-        public ContactsController(ApplicationDbContext context, UserManager<AppUser> userManager, IAddressBookService addressBookService, IImageService imageService)
+        public ContactsController(ApplicationDbContext context, UserManager<AppUser> userManager, IAddressBookService addressBookService, IImageService imageService, SearchService searchService, IABEmailSender emailSender)
         {
             _context = context;
             _userManager = userManager;
             _addressBookService = addressBookService;
             _imageService = imageService;
+            _searchService = searchService;
+            _emailSender = emailSender;
         }
 
         // GET: Contacts
         [Authorize]
-        public async Task<IActionResult> Index()
+        public async Task<IActionResult> Index(int id)
         {
-            AppUser appUser = await _userManager.GetUserAsync(User);
+            List<Contact> contacts = new List<Contact>();
 
-            List<Contact> contacts = await _context.Contacts.Where(c => c.AppUserId == appUser.Id).ToListAsync();
+            string appUserId = _userManager.GetUserId(User);
+            AppUser appUser = _context.Users.Include(c => c.Contacts).ThenInclude(c => c.Categories).FirstOrDefault(u => u.Id == appUserId);
+
+            if (id == 0)
+            {
+                contacts = appUser.Contacts.ToList();
+            }
+            else
+            {
+                contacts = appUser.Categories.FirstOrDefault(c => c.Id == id).Contacts.ToList();
+            }
+
+            ViewData["CategoryId"] = new SelectList(appUser.Categories, "Id", "Name", id);
 
             return View(contacts);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SearchContacts(string searchString)
+        {
+            var userId = _userManager.GetUserId(User);
+            List<Contact> contacts = _searchService.SearchContacts(searchString, userId).ToList();
+
+            return View(nameof(Index), contacts);
+        }
+
+
+        [Authorize]
+        [HttpGet]
+        public async Task<IActionResult> EmailContact(int id)
+        {
+            Contact contact = await _context.Contacts.Include(c => c.Categories).FirstOrDefaultAsync(c => c.Id == id);
+
+            if (contact == null)
+            {
+                return NotFound();
+            }
+
+            EmailData emailData = new()
+            {
+                EmailAddress = contact.Email,
+                FirstName = contact.FirstName,
+                LastName = contact.LastName,
+            };
+
+            EmailContactViewModel model = new()
+            {
+                Contact = contact,
+                EmailData = emailData
+            };
+
+            return View(model);
+        }
+
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EmailContact(EmailData emailData)
+        {
+            if (ModelState.IsValid)
+            {
+                AppUser appUser = await _userManager.GetUserAsync(User);
+                string emailBody = _emailSender.ComposeEmailBody(appUser, emailData);
+
+                await _emailSender.SendEmailAsync(emailData.EmailAddress, emailData.Subject, emailData.Body);
+
+                return RedirectToAction("Index", "Contacts");
+            }
+
+
+            return View();
         }
 
         // GET: Contacts/Details/5
@@ -49,10 +120,11 @@ namespace GenesisAddressBook.Controllers
                 return NotFound();
             }
 
-            Contact contact = await _context.Contacts 
+            Contact contact = await _context.Contacts
                 .Include(c => c.AppUser)
                 .Include(c => c.Categories)
                 .FirstOrDefaultAsync(m => m.Id == id);
+
 
             if (contact == null)
             {
@@ -69,7 +141,7 @@ namespace GenesisAddressBook.Controllers
             string appUserId = _userManager.GetUserId(User);
 
             ViewData["StatesList"] = new SelectList(Enum.GetValues(typeof(States)).Cast<States>().ToList());
-            ViewData["CategoryList"] = new MultiSelectList(await _addressBookService.GetUserCategoriesAsync(appUserId),"Id", "Name");
+            ViewData["CategoryList"] = new MultiSelectList(await _addressBookService.GetUserCategoriesAsync(appUserId), "Id", "Name");
             return View();
         }
 
@@ -148,7 +220,7 @@ namespace GenesisAddressBook.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,AppUserId,FirstName,LastName,BirthDate,Address1,Address2,City,State,ZipCode,Email,PhoneNumber,Created,ImageData,ImageType")] Contact contact, List<int> categoryList)
+        public async Task<IActionResult> Edit(int id, [Bind("Id,AppUserId,FirstName,LastName,BirthDate,Address1,Address2,City,State,ZipCode,Email,PhoneNumber,Created,ImageFile,ImageData,ImageType")] Contact contact, List<int> categoryList)
         {
 
             if (id != contact.Id)
@@ -170,14 +242,15 @@ namespace GenesisAddressBook.Controllers
                     if (contact.ImageFile != null)
                     {
                         // TO-DO: Image service //
-
+                        contact.ImageData = await _imageService.ConvertFileToByteArrayAsync(contact.ImageFile);
+                        contact.ImageType = contact.ImageFile.ContentType;
                     }
 
 
                     _context.Update(contact);
                     await _context.SaveChangesAsync();
 
-                    List<Category> oldCategories = (await _addressBookService.GetContactCategoriesAsync(contact.Id)).ToList(); 
+                    List<Category> oldCategories = (await _addressBookService.GetContactCategoriesAsync(contact.Id)).ToList();
 
                     foreach (Category category in oldCategories)
                     {

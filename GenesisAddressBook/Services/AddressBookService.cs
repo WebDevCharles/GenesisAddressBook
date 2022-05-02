@@ -44,7 +44,7 @@ namespace GenesisAddressBook.Services
         {
             try
             {
-                Contact? contact = await _context.Contacts.Include(c => c.Categories).FirstAsync(c => c.Id == contactId);
+                Contact? contact = await _context.Contacts.Include(c => c.Categories).FirstOrDefaultAsync(c => c.Id == contactId);
                 return contact.Categories;
             }
             catch (Exception)
@@ -70,7 +70,7 @@ namespace GenesisAddressBook.Services
 
         public async Task<IEnumerable<Category>> GetUserCategoriesAsync(string userId)
         {
-            List<Category> categories = new List<Category>();
+            List<Category> categories = new();
 
 
             try
