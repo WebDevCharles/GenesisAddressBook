@@ -36,17 +36,16 @@
                         <li class="nav-item">
                             <a class="nav-link text-dark" asp-area="" asp-controller="Categories" asp-action="Index">Categories</a>
                         </li>
-                        @if (SignInManager.IsSignedIn(User))
-                        {
-                            <li class="ms-5 mt-1">
-                                <form class="form-inline d-inline" asp-controller="Contacts" asp-action="SearchContacts" method="post">
-                                    <div class="input-group">
-                                        <input class="form-control mr-sm-2" type="search" name="searchString" placeholder="Search Term" />
-                                        <input type="submit" class="btn btn-outline-warning my-2 my-sm-0" value="Search" />
-                                    </div>
-                                </form>
-                            </li>
-                        }
+
+                        <li class="ms-5 mt-1">
+                            <form class="form-inline d-inline" asp-controller="Contacts" asp-action="SearchContacts" method="post">
+                                <div class="input-group">
+                                    <input class="form-control mr-sm-2" type="search" name="searchString" placeholder="Search Term" />
+                                    <input type="submit" class="btn btn-outline-warning my-2 my-sm-0" value="Search" />
+                                </div>
+                            </form>
+                        </li>
+
                     </ul>
                     <partial name="_LoginPartial" />
                 </div>
@@ -60,8 +59,8 @@
     </div>
 
     <footer class="border-top footer text-white">
-        <div class="container">
-            &copy; 2022 - Genesis Address Book - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
+        <div class="container text-center">
+            <a href="https://charleshallportfolio.netlify.app/">&copy; 2022 - Genesis Address Book</a>
         </div>
     </footer>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
